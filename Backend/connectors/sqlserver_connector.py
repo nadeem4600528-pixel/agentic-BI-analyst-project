@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 
 try:  # pyodbc needs the unixODBC/ODBC Driver system libraries at import time.
     import pyodbc  # type: ignore
@@ -23,6 +23,26 @@ class SQLServerConnector:
                 "File-based sources (CSV, Excel, JSON, Parquet) work without it."
             )
 
+    @staticmethod
+    def _quote_table_name(table_name: str) -> str:
+        """
+        Safely quote a (possibly schema-qualified) table name for interpolation
+        into a SQL statement, e.g. 'dbo.Orders' -> '[dbo].[Orders]'.
+        """
+        table_name = table_name.strip()
+        parts = table_name.split(".")
+
+        quoted_parts = []
+        for part in parts:
+            part = part.strip()
+            if part.startswith("[") and part.endswith("]"):
+                part = part[1:-1]
+            # Escape any closing brackets already in the identifier.
+            part = part.replace("]", "]]")
+            quoted_parts.append(f"[{part}]")
+
+        return ".".join(quoted_parts)
+
     def read(self, source: str) -> pd.DataFrame:
         """Compatibility method for the generic connector contract.
 
@@ -40,44 +60,55 @@ class SQLServerConnector:
         self,
         server: str,
         database: str,
-        driver: str = "ODBC Driver 18 for SQL Server"
+        driver: str = "ODBC Driver 18 for SQL Server",
+        username: str | None = None,
+        password: str | None = None,
     ):
         """
-        Connect to SQL Server using Windows Authentication.
+        Connect to SQL Server using Windows Authentication (or SQL auth if
+        username/password are supplied).
 
         Args:
             server: SQL Server instance name.
             database: Database name.
             driver: Installed SQL Server ODBC driver.
+            username: Optional SQL Server username for SQL authentication.
+            password: Optional SQL Server password for SQL authentication.
 
         Returns:
             Active pyodbc connection.
         """
 
-        if not server:
+        if not server or not server.strip():
             raise ValueError("Server name cannot be empty.")
 
-        if not database:
+        if not database or not database.strip():
             raise ValueError("Database name cannot be empty.")
 
         self._require_pyodbc()
+        assert pyodbc is not None  # narrows the type after the runtime check above
+
+        driver = driver.strip() if driver else "ODBC Driver 18 for SQL Server"
+        server = server.strip()
+        database = database.strip()
 
         connection_string = (
             f"DRIVER={{{driver}}};"
             f"SERVER={server};"
             f"DATABASE={database};"
-            "Trusted_Connection=yes;"
             "TrustServerCertificate=yes;"
         )
 
+        if username and password:
+            connection_string += f"UID={username};PWD={password};"
+        else:
+            connection_string += "Trusted_Connection=yes;"
+
         try:
-            self.connection = pyodbc.connect(connection_string)
-
-            print("SQL Server connection successful!")
-
+            connection = pyodbc.connect(connection_string)
+            self.connection = connection
             return self.connection
-
-        except pyodbc.Error as e:
+        except Exception as e:  # pyodbc can be absent or connection can fail.
             raise ConnectionError(
                 f"Failed to connect to SQL Server: {e}"
             ) from e
@@ -88,28 +119,15 @@ class SQLServerConnector:
         """
 
         if self.connection is None:
-            raise ConnectionError(
-                "No active SQL Server connection."
-            )
+            raise ConnectionError("No active SQL Server connection.")
 
-        if not table_name:
-            raise ValueError(
-                "Table name cannot be empty."
-            )
+        if not table_name or not table_name.strip():
+            raise ValueError("Table name cannot be empty.")
 
         try:
-            query = f"SELECT * FROM [{table_name}]"
-
-            df = pd.read_sql(
-                query,
-                self.connection
-            )
-
-            if df.empty:
-                raise ValueError(
-                    f"The table '{table_name}' contains no data."
-                )
-
+            safe_table_name = self._quote_table_name(table_name)
+            query = f"SELECT * FROM {safe_table_name}"
+            df = pd.read_sql(query, self.connection)
             return df
 
         except Exception as e:
@@ -123,32 +141,17 @@ class SQLServerConnector:
         """
 
         if self.connection is None:
-            raise ConnectionError(
-                "No active SQL Server connection."
-            )
+            raise ConnectionError("No active SQL Server connection.")
 
-        if not query:
-            raise ValueError(
-                "SQL query cannot be empty."
-            )
+        if not query or not query.strip():
+            raise ValueError("SQL query cannot be empty.")
 
-        # Basic safety guard
-        if not query.strip().lower().startswith("select"):
-            raise ValueError(
-                "Only SELECT queries are allowed."
-            )
+        normalized_query = query.strip()
+        if not normalized_query.lower().lstrip().startswith(("select", "with")):
+            raise ValueError("Only SELECT queries are allowed.")
 
         try:
-            df = pd.read_sql(
-                query,
-                self.connection
-            )
-
-            if df.empty:
-                raise ValueError(
-                    "The query returned no data."
-                )
-
+            df = pd.read_sql(normalized_query, self.connection)
             return df
 
         except Exception as e:
@@ -162,8 +165,6 @@ class SQLServerConnector:
         """
 
         if self.connection is not None:
-
             self.connection.close()
             self.connection = None
-
             print("SQL Server connection closed.")
