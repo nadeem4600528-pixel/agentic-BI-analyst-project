@@ -1,5 +1,9 @@
 import pandas as pd
-import pyodbc
+
+try:  # pyodbc needs the unixODBC/ODBC Driver system libraries at import time.
+    import pyodbc  # type: ignore
+except Exception:  # pragma: no cover - depends on host ODBC runtime
+    pyodbc = None  # type: ignore
 
 
 class SQLServerConnector:
@@ -9,6 +13,15 @@ class SQLServerConnector:
 
     def __init__(self):
         self.connection = None
+
+    @staticmethod
+    def _require_pyodbc():
+        if pyodbc is None:
+            raise ConnectionError(
+                "SQL Server support is unavailable: the 'pyodbc' package or the "
+                "ODBC Driver for SQL Server is not installed/configured on this host. "
+                "File-based sources (CSV, Excel, JSON, Parquet) work without it."
+            )
 
     def read(self, source: str) -> pd.DataFrame:
         """Compatibility method for the generic connector contract.
@@ -46,6 +59,8 @@ class SQLServerConnector:
 
         if not database:
             raise ValueError("Database name cannot be empty.")
+
+        self._require_pyodbc()
 
         connection_string = (
             f"DRIVER={{{driver}}};"

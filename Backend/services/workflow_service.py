@@ -8,6 +8,7 @@ from threading import Lock
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+import numpy as np
 import pandas as pd
 
 from analysis.analysis_engine import analyze_dataset
@@ -18,6 +19,29 @@ from reports.report_generator import build_comprehensive_report
 
 
 logger = logging.getLogger("agentic_bi.workflow")
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively convert pandas/numpy objects into JSON-serialisable values."""
+    if isinstance(value, pd.DataFrame):
+        return value.astype(object).where(pd.notna(value), None).to_dict(orient="records")
+    if isinstance(value, pd.Series):
+        return value.tolist()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, np.generic):
+        return _json_safe(value.item())
+    if isinstance(value, np.ndarray):
+        return [_json_safe(v) for v in value.tolist()]
+    if isinstance(value, (pd.Timestamp, pd.Timedelta)):
+        return value.isoformat()
+    if isinstance(value, float):
+        return None if (value != value or value in (float("inf"), float("-inf"))) else value
+    if value is not None and not isinstance(value, (str, int, bool)):
+        return str(value)
+    return value
 
 
 class WorkflowStatusStore:
@@ -171,7 +195,7 @@ class WorkflowService:
                 status="completed",
                 current_step="visualize_data",
                 stages={**WorkflowService._stages(job_id), "visualize_data": {"status": "completed", "summary": {"chart_count": len(dashboard.get("charts", [])), "kpi_count": len(dashboard.get("kpis", []))}}},
-                result={
+                result=_json_safe({
                     "dataset": cleaned_df.to_dict(orient="records"),
                     "profiling_report": profiling_report,
                     "cleaning_report": cleaning_result,
@@ -182,7 +206,7 @@ class WorkflowService:
                         "status": "not_configured",
                         "message": "Prediction model not configured yet.",
                     },
-                },
+                }),
             )
 
             logger.info("Workflow completed for job %s", job_id)
