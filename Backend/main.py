@@ -9,6 +9,7 @@ from api.upload import router as upload_router
 from api.analysis import router as analysis_router
 from api.workflow import router as workflow_router
 from api.transformation import router as transformation_router
+from api.demo import router as demo_router
 
 
 
@@ -26,3 +27,4 @@ app.include_router(report_router)
 app.include_router(workflow_router)
 app.include_router(upload_router)
 app.include_router(transformation_router)
+app.include_router(demo_router)

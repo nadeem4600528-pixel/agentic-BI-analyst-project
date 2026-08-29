@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+// Relative `/api` base: in dev the Vite proxy forwards to FastAPI (port 8000);
+// in production/preview the same origin serves the API. Override with
+// VITE_API_URL if a fully-qualified backend is required.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 300000
 })
 
@@ -32,4 +35,5 @@ export async function getApiError(error, fallback = 'Request failed') {
 }
 
 export const workflows = () => api.get('/workflow/jobs')
+export const demoDataset = () => api.get('/demo/dataset')
 export default api
