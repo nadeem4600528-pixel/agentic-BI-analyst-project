@@ -159,9 +159,18 @@ class DashboardBuilder:
             preview = df.head(100).where(pd.notna(df.head(100)), None)
             # Nested (list/dict) cells are valid JSON but not human-friendly;
             # stringify them so the preview table always renders cleanly.
-            preview = preview.applymap(
-                lambda v: str(v) if isinstance(v, (list, dict, set)) else v
-            )
+            def _stringify_nested(val: Any) -> Any:
+                """Convert list/dict/set to string, leave other values unchanged."""
+                if isinstance(val, (list, dict, set)):
+                    return str(val)
+                return val
+            
+            # Use map() for pandas 2.1+ or applymap() for older versions
+            if hasattr(preview, 'map') and callable(getattr(preview, 'map')):
+                preview = preview.map(_stringify_nested)
+            else:
+                preview = preview.applymap(_stringify_nested)  # type: ignore[attr-defined]
+            
             table_rows = preview.to_dict(orient="records")
         except Exception:
             table_rows = []

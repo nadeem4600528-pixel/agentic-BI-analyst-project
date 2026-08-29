@@ -654,11 +654,16 @@ def generate_dashboard_charts(
         if category_cols:
             add(_donut_chart(df, category_cols[0], None))
 
-    # de-duplicate by id while preserving order
+    # de-duplicate by id while preserving order; ignore malformed entries
     seen = set()
-    unique = []
+    unique: List[Dict[str, Any]] = []
     for chart in charts:
-        if chart["id"] not in seen:
-            seen.add(chart["id"])
+        if not isinstance(chart, dict):
+            continue
+        chart_id = chart.get("id")
+        if chart_id is None:
+            continue
+        if chart_id not in seen:
+            seen.add(chart_id)
             unique.append(chart)
     return unique

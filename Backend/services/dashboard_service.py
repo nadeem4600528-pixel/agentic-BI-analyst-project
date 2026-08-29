@@ -14,16 +14,22 @@ from typing import Any, Dict, Optional
 import numpy as np
 import pandas as pd
 
+from dashboard.charts import _contains_unhashable
 from dashboard.dashboard_engine import DashboardBuilder
 
 
 def _lightweight_quality(df: pd.DataFrame) -> Dict[str, Any]:
     """Fast, always-available data-quality snapshot (no heavy profilers)."""
-    total_cells = max(1, df.shape[0] * df.shape[1])
-    missing = int(df.isna().sum().sum())
+    # Only hashable columns can be factorized (duplicate detection). Nested
+    # list/dict cells would raise "unhashable type", so skip them.
+    hashable_cols = [c for c in df.columns if not _contains_unhashable(df[c])]
+    work = df[hashable_cols] if hashable_cols else df.iloc[:, :0]
+    n_rows = max(1, len(df))
+    total_cells = max(1, work.shape[0] * work.shape[1])
+    missing = int(work.isna().sum().sum())
     completeness = round((1 - missing / total_cells) * 100, 1)
-    duplicate_rows = int(df.duplicated().sum())
-    numeric = df.select_dtypes(include=[np.number])
+    duplicate_rows = int(work.duplicated().sum())
+    numeric = work.select_dtypes(include=[np.number])
     outlier_columns = 0
     for col in numeric.columns:
         series = numeric[col].dropna()
@@ -35,7 +41,7 @@ def _lightweight_quality(df: pd.DataFrame) -> Dict[str, Any]:
             outlier_columns += 1
     score = completeness
     if duplicate_rows:
-        score -= min(5, round(duplicate_rows / max(1, len(df)) * 100, 1))
+        score -= min(5, round(duplicate_rows / n_rows * 100, 1))
     return {
         "score": round(max(0, min(100, score)), 1),
         "level": "High" if score >= 85 else "Medium" if score >= 70 else "Needs review",
@@ -57,15 +63,32 @@ class DashboardService:
         category_column: Optional[str] = None,
         include_report: bool = False,
     ) -> Dict[str, Any]:
-        dashboard = DashboardBuilder.build_dashboard(
-            df,
-            date_column=date_column,
-            value_column=value_column,
-            category_column=category_column,
-        )
+        try:
+            dashboard = DashboardBuilder.build_dashboard(
+                df,
+                date_column=date_column,
+                value_column=value_column,
+                category_column=category_column,
+            )
+        except Exception:
+            dashboard = {
+                "kpis": [],
+                "charts": [],
+                "insights": [],
+                "table": {"columns": [str(c) for c in df.columns], "rows": [], "total_rows": int(len(df))},
+                "layout": {"sections": [], "spans": {}},
+                "filters": [],
+                "summary": {"rows": int(len(df)), "columns": int(len(df.columns))},
+            }
 
         # Fast, always-present quality summary.
-        quality = _lightweight_quality(df)
+        try:
+            quality = _lightweight_quality(df)
+        except Exception:
+            quality = {
+                "score": 0.0, "level": "Needs review", "completeness": 0.0,
+                "missing_cells": 0, "duplicate_rows": 0, "outlier_columns": 0,
+            }
         bi_agent = {
             "status": "ready",
             "role": "Professional BI Analyst",

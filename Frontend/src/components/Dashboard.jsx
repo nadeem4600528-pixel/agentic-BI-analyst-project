@@ -158,6 +158,10 @@ export default function Dashboard({ records, payload, run, result }) {
         </button>
       </section>
 
+      {result?.truncated_note && (
+        <div className="alert alert-warning mb-3">{result.truncated_note}</div>
+      )}
+
       {/* Filters / slicers */}
       {(roleFilters.length > 0 || slicerFilters.length > 0) && (
         <div className="filter-bar panel">
