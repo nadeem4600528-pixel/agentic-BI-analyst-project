@@ -40,22 +40,50 @@ def _to_datetime(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce")
 
 
+def _contains_unhashable(series: pd.Series) -> bool:
+    if not isinstance(series, pd.Series):
+        return False
+    """True if any non-null value is a list/dict/set (invalid for groupby)."""
+    try:
+        sample = series.dropna().head(200)
+        if len(sample) == 0:
+            return False
+        return bool(sample.map(lambda v: isinstance(v, (list, dict, set))).any())
+    except Exception:
+        return False
+
+
+def _looks_like_date_series(series: pd.Series) -> bool:
+    """Cheap heuristic: does this (small) series parse mostly as dates?"""
+    if _contains_unhashable(series):
+        return False
+    parsed = _to_datetime(series)
+    if len(series) == 0 or parsed.notna().mean() < 0.85:
+        return False
+    if series.nunique() <= 3:
+        return False
+    return True
+
+
 def _infer_datetime_column(df: pd.DataFrame) -> Optional[str]:
+    # 1) Already a datetime dtype, or a name hinting at a date that parses.
     for column in df.columns:
         series = df[column]
         if pd.api.types.is_datetime64_any_dtype(series):
             return column
+        if _contains_unhashable(series):
+            continue
         name = str(column).lower()
         if "date" in name or "time" in name:
             parsed = _to_datetime(series)
-            if parsed.notna().mean() >= 0.7:
+            if len(series) > 0 and parsed.notna().mean() >= 0.7:
                 return column
-    # fallback: any column that parses mostly as dates
+    # 2) Fallback: scan non-numeric columns, but only on a sample for speed.
     for column in df.columns:
-        if pd.api.types.is_numeric_dtype(df[column]):
+        if pd.api.types.is_numeric_dtype(df[column]) or _contains_unhashable(df[column]):
             continue
-        parsed = _to_datetime(df[column])
-        if len(df) > 0 and parsed.notna().mean() >= 0.85 and df[column].nunique() > 3:
+        sample = df[column].dropna().head(200)
+        if _looks_like_date_series(sample):
             return column
     return None
 
@@ -90,6 +118,8 @@ def _infer_category_columns(df: pd.DataFrame, max_cardinality: int = 30, exclude
     result = []
     for column in df.columns:
         if column in exclude or pd.api.types.is_numeric_dtype(df[column]) or pd.api.types.is_datetime64_any_dtype(df[column]):
+            continue
+        if _contains_unhashable(df[column]):
             continue
         unique_count = df[column].dropna().nunique()
         if 1 < unique_count <= min(max_cardinality, max(2, len(df) // 5)):
@@ -237,7 +267,7 @@ def _growth_chart(df: pd.DataFrame, date_column: str, measure: str) -> Optional[
 
 
 def _category_bar(
-    df: pd.DataFrame, category_column: str, measure: str, top_n: int = 10
+    df: pd.DataFrame, category_column: str, measure: Optional[str], top_n: int = 10
 ) -> Optional[Dict[str, Any]]:
     if not category_column or not measure or category_column not in df.columns or measure not in df.columns:
         return None
