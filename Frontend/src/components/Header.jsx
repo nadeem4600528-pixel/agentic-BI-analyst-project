@@ -1,0 +1,1 @@
+export default function Header({ title, fileName, setPage }) { return <header className="topbar"><div><div className="eyebrow">ANALYTICS WORKSPACE</div><h1>{title}</h1></div><div className="top-actions"><span className="dataset-pill">● {fileName}</span><button className="btn btn-primary" onClick={() => setPage('upload')}>＋ New dataset</button></div></header> }

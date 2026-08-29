@@ -1,0 +1,5 @@
+Design – Define the architecture and responsibilities.
+Implement – Write clean, modular code.
+Test – Verify the module independently.
+Integrate – Connect it with the rest of the system.
+Refactor (if needed) – Improve code quality before moving on.

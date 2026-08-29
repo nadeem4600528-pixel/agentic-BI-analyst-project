@@ -1,0 +1,3 @@
+export function PanelTitle({ title, sub }) { return <div className="panel-title"><div><h3>{title}</h3><p>{sub}</p></div><span className="more">•••</span></div> }
+export function Table({ records }) { const fields = Object.keys(records[0] || {}); return <div className="table-responsive"><table className="table align-middle"><thead><tr>{fields.map(k => <th key={k}>{k}</th>)}</tr></thead><tbody>{records.slice(0, 8).map((row, i) => <tr key={i}>{fields.map(k => <td key={k}>{String(row[k] ?? '—')}</td>)}</tr>)}</tbody></table></div> }
+export function Stat({ label, value, note }) { return <div className="stat-card"><span>{label}</span><strong>{value}</strong><small>{note}</small></div> }

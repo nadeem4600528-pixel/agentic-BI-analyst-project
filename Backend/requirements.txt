@@ -1,0 +1,63 @@
+# ===========================
+# Backend Framework
+# ===========================
+fastapi
+uvicorn
+
+# ===========================
+# Data Processing
+# ===========================
+pandas
+numpy
+
+# ===========================
+# File Connectors
+# ===========================
+openpyxl
+pyarrow
+pyodbc
+
+# ===========================
+# Data Validation
+# ===========================
+pydantic
+python-multipart
+
+# ===========================
+# Environment Variables
+# ===========================
+python-dotenv
+
+# ===========================
+# AI Providers
+# ===========================
+google-generativeai
+ollama
+openai
+
+# ===========================
+# HTTP Requests
+# ===========================
+requests
+httpx
+
+# ===========================
+# Dashboard & Visualization
+# ===========================
+plotly
+
+# ===========================
+# Logging
+# ===========================
+loguru
+
+# ===========================
+# Scientific Computing
+# ===========================
+scipy
+scikit-learn
+
+# ===========================
+# Utilities
+# ===========================
+tqdm
