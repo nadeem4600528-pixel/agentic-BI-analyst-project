@@ -13,6 +13,7 @@ from reports.pdf_reports import export_html, export_pdf
 from pydantic import BaseModel
 
 from services.report_service import ReportService
+from services import dataset_store
 
 
 router = APIRouter(prefix="/report", tags=["report"])
@@ -24,6 +25,12 @@ class ReportRequest(BaseModel):
     value_column: Optional[str] = None
     category_column: Optional[str] = None
 
+class ReportByIdRequest(BaseModel):
+    dataset_id: str
+    kind: str = "full"  # "profiling" | "cleaning" | "analysis" | "full"
+    date_column: Optional[str] = None
+    value_column: Optional[str] = None
+    category_column: Optional[str] = None
 
 @router.post("/")
 async def generate_report(payload: ReportRequest) -> Dict[str, Any]:
@@ -90,6 +97,31 @@ def _full_report(payload: ReportRequest) -> Dict[str, Any]:
         value_column=payload.value_column,
         category_column=payload.category_column,
     )
+
+@router.post("/by-id")
+async def report_by_id(payload: ReportByIdRequest) -> Dict[str, Any]:
+    """Generate a single report section from a dataset already stored
+    server-side, so the frontend never re-uploads the full dataset."""
+    df = dataset_store.get(payload.dataset_id)
+    if df is None:
+        raise HTTPException(status_code=404, detail="Dataset not found or expired. Please re-upload.")
+    try:
+        if payload.kind == "profiling":
+            return ReportService.generate_profiling_report(df)
+        if payload.kind == "cleaning":
+            return ReportService.generate_cleaning_report(df)
+        if payload.kind == "analysis":
+            return ReportService.generate_analysis_report(
+                df, date_column=payload.date_column, value_column=payload.value_column
+            )
+        return ReportService.generate_full_report(
+            df,
+            date_column=payload.date_column,
+            value_column=payload.value_column,
+            category_column=payload.category_column,
+        )
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/export/excel")

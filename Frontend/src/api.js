@@ -14,6 +14,8 @@ export const profileUpload = (file, onUploadProgress) => {
   return api.post('/upload/profile', form, { onUploadProgress })
 }
 export const dashboard = (payload) => api.post('/dashboard/', payload)
+export const dashboardById = (payload) => api.post('/dashboard/by-id', payload)
+export const reportById = (payload) => api.post('/report/by-id', payload)
 export const transform = (payload) => api.post('/transformation/', payload)
 export const analyze = (payload) => api.post('/analysis/', payload)
 export const report = (payload) => api.post('/report/', payload)

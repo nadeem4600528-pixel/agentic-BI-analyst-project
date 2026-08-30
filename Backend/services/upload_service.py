@@ -24,6 +24,7 @@ def _json_safe(value: Any) -> Any:
 	return value
 from connectors.sqlserver_connector import SQLServerConnector
 from profiling.profiler import DataProfiler
+from services.dataset_store import put as store_dataset
 
 
 def load_dataframe(file_path: str) -> pd.DataFrame:
@@ -68,6 +69,7 @@ def profile_file(
 	report["data"] = dataframe.astype(object).where(pd.notna(dataframe), None).to_dict(orient="records")
 	report["rows"] = int(len(dataframe))
 	report["columns"] = [str(column) for column in dataframe.columns]
+	report["dataset_id"] = store_dataset(dataframe)
 	return _json_safe(report)
 
 

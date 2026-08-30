@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { dashboard } from '../api'
+import { dashboardById } from '../api'
 import PlotlyChart from './charts'
 import { PanelTitle, Table } from './Common'
 
@@ -77,39 +77,31 @@ function spanClass(chart, spans) {
   return 'span-half'
 }
 
-export default function Dashboard({ records, payload, run, result }) {
+export default function Dashboard({ records, payload, run, result, datasetId }) {
   const [roles, setRoles] = useState({ date: '', value: '', category: '' })
   const [slicers, setSlicers] = useState({})
-
   const hasData = records.length > 0
 
-  // Build the request payload (filters + role columns). Slicers are applied
-  // client-side by sending the filtered rows so no extra endpoint is needed.
   const dashboardPayload = useMemo(() => {
-    let rows = records
-    const activeSlicers = Object.entries(slicers).filter(([, vals]) => Array.isArray(vals) && vals.length)
-    if (activeSlicers.length) {
-      rows = records.filter(r => activeSlicers.every(([name, vals]) => {
-        const col = name.replace('slicer_', '')
-        return vals.includes(String(r[col]))
-      }))
-    }
+    const filters = {}
+    Object.entries(slicers).forEach(([name, vals]) => {
+      if (Array.isArray(vals) && vals.length) filters[name.replace('slicer_', '')] = vals
+    })
     return {
-      data: rows,
+      dataset_id: datasetId,
       date_column: roles.date || payload?.date_column || undefined,
       value_column: roles.value || payload?.value_column || undefined,
       category_column: roles.category || payload?.category_column || undefined,
+      filters,
     }
-  }, [records, slicers, roles, payload])
+  }, [datasetId, slicers, roles, payload])
 
-  const matchingRows = dashboardPayload.data.length
+  const matchingRows = result?.summary?.rows ?? records.length
 
-  // Auto-run when data first loads or filter/role selection changes.
   useEffect(() => {
-    if (hasData && matchingRows > 0) run(() => dashboard(dashboardPayload))
+    if (hasData && datasetId) run(() => dashboardById(dashboardPayload))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasData, matchingRows, dashboardPayload.date_column, dashboardPayload.value_column, dashboardPayload.category_column,
-      JSON.stringify(slicers)])
+  }, [hasData, datasetId, dashboardPayload.date_column, dashboardPayload.value_column, dashboardPayload.category_column, JSON.stringify(dashboardPayload.filters)])
 
   if (!hasData) {
     return (
@@ -118,6 +110,18 @@ export default function Dashboard({ records, payload, run, result }) {
           <span className="tag">NO DATASET</span>
           <h2>Upload a dataset to begin.</h2>
           <p>The BI Agent profiles, cleans, analyzes and builds a Power BI-style interactive dashboard automatically.</p>
+        </div>
+      </section>
+    )
+  }
+
+  if (!datasetId) {
+    return (
+      <section>
+        <div className="empty-state">
+          <span className="tag">DATASET NOT LINKED</span>
+          <h2>Please re-upload your dataset.</h2>
+          <p>Re-upload it from the Data upload page to link it.</p>
         </div>
       </section>
     )
@@ -153,8 +157,7 @@ export default function Dashboard({ records, payload, run, result }) {
           <h2>From raw data to<br /><em>business decisions.</em></h2>
           <p>Auto-generated KPIs, trends, breakdowns, distributions and smart insights — refreshed as you filter.</p>
         </div>
-        <button className="btn btn-light" onClick={() => run(() => dashboard(dashboardPayload))}>
-          Refresh ↻
+        <button className="btn btn-light" onClick={() => run(() => dashboardById(dashboardPayload))}>           
         </button>
       </section>
 

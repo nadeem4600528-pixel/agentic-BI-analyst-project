@@ -9,6 +9,7 @@ import pandas as pd
 from fastapi import APIRouter
 
 from services.upload_service import _json_safe
+from services.dataset_store import put as store_dataset
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
@@ -33,5 +34,6 @@ def demo_dataset() -> Dict[str, Any]:
             "category_column": next((c for c in ("region", "category", "segment") if c in df.columns), None),
         },
         "filename": "sample_sales.csv",
+        "dataset_id": store_dataset(df),
     }
     return _json_safe(payload)

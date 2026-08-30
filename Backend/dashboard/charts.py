@@ -18,7 +18,7 @@ DataFrame-in / dict-list-out. This module never mutates the input.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, cast
 
 import numpy as np
 import pandas as pd
@@ -246,10 +246,13 @@ def _growth_chart(df: pd.DataFrame, date_column: str, measure: str) -> Optional[
     monthly = temp.set_index(date_column)[measure].resample(_month_freq()).sum()
     if len(monthly) < 2:
         return None
-    growth = monthly.pct_change().replace([np.inf, -np.inf], np.nan).dropna() * 100
+    growth_pct = monthly.pct_change()
+    growth_clean = growth_pct.replace([np.inf, -np.inf], np.nan)
+    growth = cast(pd.Series, growth_clean.dropna())
     if growth.empty:
         return None
-    colors = ["#22c55e" if v >= 0 else "#ef4444" for v in growth]
+    growth_values = growth * 100
+    colors = ["#22c55e" if v >= 0 else "#ef4444" for v in growth_values]
     return {
         "id": "growth_bars",
         "type": "growth",
@@ -258,8 +261,8 @@ def _growth_chart(df: pd.DataFrame, date_column: str, measure: str) -> Optional[
         "x_axis": str(date_column),
         "y_axis": f"{measure} growth %",
         "data": {
-            "x": [d.strftime("%b %Y") for d in growth.index],
-            "y": [round(float(v), 1) for v in growth.values],
+            "x": [d.strftime("%b %Y") for d in growth_values.index],
+            "y": [round(float(v), 1) for v in growth_values.values],
             "colors": colors,
         },
         "layout_hint": {"span": "wide"},
@@ -454,7 +457,13 @@ def _box_chart(df: pd.DataFrame, category_column: str, measure: str, top_n: int 
     subset = df[df[category_column].isin(top_groups)]
     traces = []
     for group in top_groups:
-        values = pd.to_numeric(subset.loc[subset[category_column] == group, measure], errors="coerce").dropna()
+        mask = subset[category_column] == group
+        group_series = subset.loc[mask, measure]
+        # Ensure we have a Series, not a scalar
+        if not isinstance(group_series, pd.Series):
+            continue
+        values_numeric = cast(pd.Series, pd.to_numeric(group_series, errors="coerce"))
+        values = values_numeric.dropna()
         if values.empty:
             continue
         q1, median, q3 = values.quantile([0.25, 0.5, 0.75])
@@ -489,8 +498,8 @@ def _scatter_chart(df: pd.DataFrame, x_measure: str, y_measure: str, color_by: O
     if x_measure not in df.columns or y_measure not in df.columns:
         return None
     temp = df[[c for c in {x_measure, y_measure, color_by} if c]].copy()
-    temp[x_measure] = pd.to_numeric(temp[x_measure], errors="coerce")
-    temp[y_measure] = pd.to_numeric(temp[y_measure], errors="coerce")
+    temp[x_measure] = cast(pd.Series, pd.to_numeric(temp[x_measure], errors="coerce"))
+    temp[y_measure] = cast(pd.Series, pd.to_numeric(temp[y_measure], errors="coerce"))
     temp = temp.dropna(subset=[x_measure, y_measure])
     if len(temp) < 5:
         return None
@@ -544,7 +553,9 @@ def _heatmap_chart(df: pd.DataFrame, measures: Sequence[str]) -> Optional[Dict[s
 def _gauge_chart(df: pd.DataFrame, measure: str, target: Optional[float] = None) -> Optional[Dict[str, Any]]:
     if not measure or measure not in df.columns:
         return None
-    series = pd.to_numeric(df[measure], errors="coerce").dropna()
+    measure_series = df[measure]
+    numeric_series = cast(pd.Series, pd.to_numeric(measure_series, errors="coerce"))
+    series = numeric_series.dropna()
     if series.empty:
         return None
     total = float(series.sum())
@@ -566,7 +577,9 @@ def _gauge_chart(df: pd.DataFrame, measure: str, target: Optional[float] = None)
 def _histogram_chart(df: pd.DataFrame, measure: str, bins: int = 20) -> Optional[Dict[str, Any]]:
     if not measure or measure not in df.columns:
         return None
-    series = pd.to_numeric(df[measure], errors="coerce").dropna()
+    measure_series = df[measure]
+    numeric_series = cast(pd.Series, pd.to_numeric(measure_series, errors="coerce"))
+    series = numeric_series.dropna()
     if series.empty:
         return None
     counts, edges = np.histogram(series, bins=min(bins, max(5, len(series) // 5)))
@@ -654,16 +667,11 @@ def generate_dashboard_charts(
         if category_cols:
             add(_donut_chart(df, category_cols[0], None))
 
-    # de-duplicate by id while preserving order; ignore malformed entries
+    # de-duplicate by id while preserving order
     seen = set()
-    unique: List[Dict[str, Any]] = []
+    unique = []
     for chart in charts:
-        if not isinstance(chart, dict):
-            continue
-        chart_id = chart.get("id")
-        if chart_id is None:
-            continue
-        if chart_id not in seen:
-            seen.add(chart_id)
+        if chart["id"] not in seen:
+            seen.add(chart["id"])
             unique.append(chart)
     return unique

@@ -17,6 +17,9 @@ import json
 from datetime import datetime
 
 import pandas as pd
+
+# Maximum rows to profile for performance
+MAX_PROFILING_ROWS = 50000
 from .metadata import profile_metadata
 from .structure import profile_structure
 from .schema import profile_schema
